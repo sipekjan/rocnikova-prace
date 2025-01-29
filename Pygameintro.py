@@ -1,4 +1,5 @@
 import pygame
+import time
 
 pygame.init()
 running = True
@@ -10,6 +11,11 @@ player_image = pygame.image.load("player.png")
 player_image = pygame.transform.scale(player_image, (55, 55))
 block_image = pygame.image.load("block.png")
 block_image = pygame.transform.scale(block_image, (60, 60))
+bomb_image = pygame.image.load("bomb.png")
+bomb_image = pygame.transform.scale(bomb_image, (30, 30))
+
+bombs = []
+bomb_duration = 3000
 map = pygame.image.load("map.png")
 blocks = []
 for i in range(4):
@@ -59,6 +65,12 @@ while running:
             if player_rect.colliderect(block):
                 player_x -= 5 
                 break
+    if pressed[pygame.K_SPACE]:
+        bombs.append((player_x + 13, player_y + 13, pygame.time.get_ticks()))
+        current_time = pygame.time.get_ticks()
+        bombs = [(x, y, t) for x, y, t in bombs if current_time - t < 3000]
+    for x, y, t in bombs:
+        screen.blit(bomb_image, (x, y))
 
     for block in blocks:
         screen.blit(block_image, (block.x, block.y))
