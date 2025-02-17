@@ -14,7 +14,7 @@ block_image = pygame.transform.scale(block_image, (60, 60))
 bomb_image = pygame.image.load("bomb.png")
 bomb_image = pygame.transform.scale(bomb_image, (30, 30))
 
-enemy_x, enemy_y = 390, 330  # Enemy spawns in the center
+enemy_x, enemy_y = 390, 330
 enemy_speed = 2
 enemy_direction = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
 change_direction_time = pygame.time.get_ticks() + 1000
@@ -103,43 +103,38 @@ while running:
     bombs = new_bombs
     
     new_explosions = []
-    player_in_explosion = False  # Flag to check if player is in explosion
+    player_in_explosion = False  
     
     for x, y, t in explosions:
         if current_time - t < explosion_duration:
             new_explosions.append((x, y, t))
-            # Oranžový čtverec o velikosti 40x40 pro každou část exploze
-            pygame.draw.rect(screen, (255, 165, 0), (x, y, 40, 40))  # Střed exploze
-            
-            # Rozšíření exploze do kříže (plus)
-            # Exploze ve směru nahoru
+            pygame.draw.rect(screen, (255, 165, 0), (x, y, 40, 40)) 
+    
             pygame.draw.rect(screen, (255, 165, 0), (x, y - 40, 40, 40))
-            # Exploze ve směru dolů
+           
             pygame.draw.rect(screen, (255, 165, 0), (x, y + 40, 40, 40))
-            # Exploze vlevo
+          
             pygame.draw.rect(screen, (255, 165, 0), (x - 40, y, 40, 40))
-            # Exploze vpravo
+         
             pygame.draw.rect(screen, (255, 165, 0), (x + 40, y, 40, 40))
             
-            # Zničení destruktivních bloků, pokud jsou v oblasti exploze
             explosion_rects = [
-                pygame.Rect(x, y, 40, 40),  # Střed
-                pygame.Rect(x, y - 40, 40, 40),  # Nahoru
-                pygame.Rect(x, y + 40, 40, 40),  # Dolů
-                pygame.Rect(x - 40, y, 40, 40),  # Vlevo
-                pygame.Rect(x + 40, y, 40, 40)   # Vpravo
+                pygame.Rect(x, y, 40, 40),  
+                pygame.Rect(x, y - 40, 40, 40),  
+                pygame.Rect(x, y + 40, 40, 40),  
+                pygame.Rect(x - 40, y, 40, 40),  
+                pygame.Rect(x + 40, y, 40, 40)   
             ]
             for explosion_rect in explosion_rects:
                 destructible_blocks = [block for block in destructible_blocks if not block.colliderect(explosion_rect)]
                 
-                # Kontrola, zda je hráč v oblasti exploze
                 if player_rect.colliderect(explosion_rect):
                     player_in_explosion = True
     
     explosions = new_explosions
     
     if player_in_explosion:
-        running = False  # Ukončí hru, pokud je hráč v oblasti exploze
+        running = False
     
     for block in blocks:
         screen.blit(block_image, (block.x, block.y))
