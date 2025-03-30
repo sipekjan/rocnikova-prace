@@ -38,7 +38,7 @@ possible_positions = [(x, y) for x in range(120, 661, 60) for y in range(120, 54
                       if (x, y) != (60, 60) and not any(block.collidepoint(x, y) for block in blocks)]
 random.shuffle(possible_positions)
 
-destructible_blocks = [pygame.Rect(x, y, 60, 60) for x, y in possible_positions[:50]] 
+destructible_blocks = [pygame.Rect(x, y, 60, 60) for x, y in possible_positions[:49]] 
 
 while running:
     screen.fill((0, 0, 0))
