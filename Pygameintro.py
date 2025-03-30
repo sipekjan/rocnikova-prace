@@ -14,7 +14,7 @@ block_image = pygame.transform.scale(block_image, (60, 60))
 bomb_image = pygame.image.load("bomb.png")
 bomb_image = pygame.transform.scale(bomb_image, (30, 30))
 
-enemy_x, enemy_y = 390, 330  # Enemy spawns in the center
+enemy_x, enemy_y = 390, 330 
 enemy_speed = 2
 enemy_direction = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
 change_direction_time = pygame.time.get_ticks() + 1000
@@ -27,16 +27,18 @@ map = pygame.image.load("map.png")
 blocks = []
 destructible_blocks = []
 
+
 for i in range(4):
     for j in range(5):
         block = pygame.Rect(120 + (j * 120), 120 + (120 * i), 60, 60)
         blocks.append(block)
 
-for i in range(5):
-    for j in range(6):
-        x, y = 60 + j * 120, 60 + i * 120
-        if (x, y) != (60, 60) and not any(block.collidepoint(x, y) for block in blocks):
-            destructible_blocks.append(pygame.Rect(x, y, 60, 60))
+
+possible_positions = [(x, y) for x in range(120, 661, 60) for y in range(120, 541, 60)
+                      if (x, y) != (60, 60) and not any(block.collidepoint(x, y) for block in blocks)]
+random.shuffle(possible_positions)
+
+destructible_blocks = [pygame.Rect(x, y, 60, 60) for x, y in possible_positions[:50]] 
 
 while running:
     screen.fill((0, 0, 0))
@@ -51,40 +53,32 @@ while running:
     pressed = pygame.key.get_pressed()
     player_rect = pygame.Rect(player_x, player_y, 55, 55)
     
-    if pressed[pygame.K_w]:
+    if pressed[pygame.K_w] and player_y > 60:
         player_y -= 5
-        if player_y < 60:
-            player_y = 61
         player_rect.y = player_y
         for block in blocks + destructible_blocks:
             if player_rect.colliderect(block):
                 player_y += 5
                 break
     
-    if pressed[pygame.K_s]:
+    if pressed[pygame.K_s] and player_y < 545:
         player_y += 5
-        if player_y > 544:
-            player_y = 543
         player_rect.y = player_y
         for block in blocks + destructible_blocks:
             if player_rect.colliderect(block):
                 player_y -= 5
                 break
     
-    if pressed[pygame.K_a]:
+    if pressed[pygame.K_a] and player_x > 60:
         player_x -= 5
-        if player_x < 60:
-            player_x = 61
         player_rect.x = player_x
         for block in blocks + destructible_blocks:
             if player_rect.colliderect(block):
                 player_x += 5
                 break
     
-    if pressed[pygame.K_d]:
+    if pressed[pygame.K_d] and player_x < 665:
         player_x += 5
-        if player_x > 663:
-            player_x = 664
         player_rect.x = player_x
         for block in blocks + destructible_blocks:
             if player_rect.colliderect(block):
@@ -103,43 +97,33 @@ while running:
     bombs = new_bombs
     
     new_explosions = []
-    player_in_explosion = False  # Flag to check if player is in explosion
+    player_in_explosion = False 
     
     for x, y, t in explosions:
         if current_time - t < explosion_duration:
             new_explosions.append((x, y, t))
-            # Oranžový čtverec o velikosti 40x40 pro každou část exploze
-            pygame.draw.rect(screen, (255, 165, 0), (x, y, 40, 40))  # Střed exploze
-            
-            # Rozšíření exploze do kříže (plus)
-            # Exploze ve směru nahoru
+            pygame.draw.rect(screen, (255, 165, 0), (x, y, 40, 40))  
             pygame.draw.rect(screen, (255, 165, 0), (x, y - 40, 40, 40))
-            # Exploze ve směru dolů
             pygame.draw.rect(screen, (255, 165, 0), (x, y + 40, 40, 40))
-            # Exploze vlevo
             pygame.draw.rect(screen, (255, 165, 0), (x - 40, y, 40, 40))
-            # Exploze vpravo
             pygame.draw.rect(screen, (255, 165, 0), (x + 40, y, 40, 40))
             
-            # Zničení destruktivních bloků, pokud jsou v oblasti exploze
             explosion_rects = [
-                pygame.Rect(x, y, 40, 40),  # Střed
-                pygame.Rect(x, y - 40, 40, 40),  # Nahoru
-                pygame.Rect(x, y + 40, 40, 40),  # Dolů
-                pygame.Rect(x - 40, y, 40, 40),  # Vlevo
-                pygame.Rect(x + 40, y, 40, 40)   # Vpravo
+                pygame.Rect(x, y, 40, 40), 
+                pygame.Rect(x, y - 40, 40, 40), 
+                pygame.Rect(x, y + 40, 40, 40),  
+                pygame.Rect(x - 40, y, 40, 40),  
+                pygame.Rect(x + 40, y, 40, 40)  
             ]
             for explosion_rect in explosion_rects:
                 destructible_blocks = [block for block in destructible_blocks if not block.colliderect(explosion_rect)]
-                
-                # Kontrola, zda je hráč v oblasti exploze
                 if player_rect.colliderect(explosion_rect):
                     player_in_explosion = True
     
     explosions = new_explosions
     
     if player_in_explosion:
-        running = False  # Ukončí hru, pokud je hráč v oblasti exploze
+        running = False 
     
     for block in blocks:
         screen.blit(block_image, (block.x, block.y))
@@ -156,7 +140,7 @@ while running:
     new_enemy_y = enemy_y + enemy_direction[1] * enemy_speed
     new_enemy_rect = pygame.Rect(new_enemy_x, new_enemy_y, 20, 20)
     
-    if (60 <= new_enemy_x <= 700 and 60 <= new_enemy_y <= 600 and
+    if (120 <= new_enemy_x <= 660 and 120 <= new_enemy_y <= 540 and
         not any(new_enemy_rect.colliderect(block) for block in blocks + destructible_blocks)):
         enemy_x = new_enemy_x
         enemy_y = new_enemy_y
