@@ -12,7 +12,9 @@ map_img = pygame.image.load("map.png")
 enemy_img = pygame.image.load("ballon.png")
 enemy_img = pygame.transform.scale(enemy_img, (37, 50))
 bomb_img = pygame.image.load("bomb.png")
-bomb_img = pygame.transform.scale(bomb_img, (30, 30))
+bomb_img = pygame.transform.scale(bomb_img, (40, 40))
+destroyable_block_img = pygame.image.load("destroyable_block.png")
+destroyable_block_img = pygame.transform.scale(destroyable_block_img, (60, 60))
 
 player_x, player_y = 60, 60
 player_width, player_height = 35, 47
@@ -30,7 +32,6 @@ tile_positions = [(x, y) for x in range(60, 661, 60) for y in range(60, 541, 60)
 player_cell = (player_x // 60 * 60, player_y // 60 * 60)
 forbidden_cells = set((player_cell[0] + dx*60, player_cell[1] + dy*60) for dx in (-1,0,1) for dy in (-1,0,1))
 enemy_cell = ((enemy_x // 60) * 60, (enemy_y // 60) * 60)
-
 valid_destroyable_cells = []
 for cell in tile_positions:
     if cell not in forbidden_cells and cell != enemy_cell:
@@ -46,7 +47,7 @@ random.shuffle(valid_destroyable_cells)
 destroyable_blocks = [pygame.Rect(x, y, 60, 60) for (x, y) in valid_destroyable_cells[:49]]
 
 bombs = []
-explosions = [] 
+explosions = []
 
 running = True
 while running:
@@ -57,9 +58,14 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            bomb_x = (player_x // 60) * 60 + 15
-            bomb_y = (player_y // 60) * 60 + 15
-            bombs.append((bomb_x, bomb_y, current_time))
+            bomb_x = (player_x // 60) * 60 + 10
+            bomb_y = (player_y // 60) * 60 + 10
+            bombs.append({
+                "x": bomb_x,
+                "y": bomb_y,
+                "time": current_time,
+                "player_inside": True
+            })
 
     keys = pygame.key.get_pressed()
     dx = dy = 0
@@ -78,9 +84,21 @@ while running:
         if next_player_rect.colliderect(block):
             collision = True
             break
+    for bomb in bombs:
+        bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
+        if next_player_rect.colliderect(bomb_rect) and not bomb["player_inside"]:
+            collision = True
+            break
     if not collision:
         player_x += dx
         player_y += dy
+
+    player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+
+    for bomb in bombs:
+        bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
+        if not player_rect.colliderect(bomb_rect):
+            bomb["player_inside"] = False
 
     if current_time > next_enemy_move_time:
         enemy_direction = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
@@ -95,6 +113,11 @@ while running:
         if next_enemy_rect.colliderect(block):
             enemy_can_move = False
             break
+    for bomb in bombs:
+        bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
+        if next_enemy_rect.colliderect(bomb_rect):
+            enemy_can_move = False
+            break
     if not enemy_can_move or not (120 <= next_enemy_x <= 660 and 120 <= next_enemy_y <= 540):
         enemy_direction = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
     else:
@@ -103,11 +126,11 @@ while running:
     enemy_rect = pygame.Rect(enemy_x, enemy_y, 37, 50)
 
     active_bombs = []
-    for bomb_x, bomb_y, time_placed in bombs:
-        if current_time - time_placed < 3000:
-            active_bombs.append((bomb_x, bomb_y, time_placed))
+    for bomb in bombs:
+        if current_time - bomb["time"] < 3000:
+            active_bombs.append(bomb)
         else:
-            explosions.append((bomb_x - 15, bomb_y - 15, current_time))
+            explosions.append((bomb["x"] - 15, bomb["y"] - 15, current_time))
     bombs = active_bombs
 
     window.fill((0,0,0))
@@ -116,13 +139,12 @@ while running:
     for block in solid_blocks:
         window.blit(block_img, (block.x, block.y))
     for block in destroyable_blocks:
-        pygame.draw.rect(window, (50,50,50), block)
-    for bomb_x, bomb_y, _ in bombs:
-        window.blit(bomb_img, (bomb_x, bomb_y))
+        window.blit(destroyable_block_img, (block.x, block.y))
+    for bomb in bombs:
+        window.blit(bomb_img, (bomb["x"], bomb["y"]))
 
     new_explosions = []
     player_dead = False
-    player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
 
     for exp_x, exp_y, start_time in explosions:
         if current_time - start_time < 500:
