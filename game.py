@@ -166,6 +166,8 @@ def run_game(game_settings):
     destroyable_block_img = pygame.transform.scale(destroyable_block_img, (60, 60))
     explosion_img = pygame.image.load("explosion.png")
     explosion_img = pygame.transform.scale(explosion_img, (180, 180))
+    door_img = pygame.image.load("door.png")
+    door_img = pygame.transform.scale(door_img, (60, 60))
 
     player_x, player_y = 60, 60
     player_width, player_height = 35, 47
@@ -197,10 +199,15 @@ def run_game(game_settings):
     random.shuffle(valid_destroyable_cells)
     destroyable_blocks = [pygame.Rect(x, y, 60, 60) for (x, y) in valid_destroyable_cells[:49]]
 
+    # Vyber dvere
+    door_block = random.choice(destroyable_blocks)
+    door_position = (door_block.x, door_block.y)
+    door_visible = False
+
     bombs = []
     explosions = []
     can_place_bomb = True
-    bomb_cooldown_time = 0 
+    bomb_cooldown_time = 0
 
     running = True
     while running:
@@ -217,7 +224,7 @@ def run_game(game_settings):
                         bomb_x = (player_x // 60) * 60 + 10
                         bomb_y = (player_y // 60) * 60 + 10
                         bombs.append({"x": bomb_x, "y": bomb_y, "time": current_time, "player_inside": True})
-                        can_place_bomb = False 
+                        can_place_bomb = False
                 if event.key == pygame.K_ESCAPE:
                     if pause_menu(window, game_settings):
                         return
@@ -230,7 +237,7 @@ def run_game(game_settings):
             dy = 3
         if keys[game_settings["controls"]["left"]] and player_x > 60:
             dx = -3
-        if keys[game_settings["controls"]["right"]] and player_x < 660 - player_width:
+        if keys[game_settings["controls"]["right"]] and player_x < 720 - player_width:
             dx = 3
 
         next_player_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
@@ -285,8 +292,8 @@ def run_game(game_settings):
             if current_time - bomb["time"] < 3000:
                 active_bombs.append(bomb)
             else:
-                explosions.append((bomb["x"]-70 , bomb["y"]-70, current_time))
-                can_place_bomb = True  
+                explosions.append((bomb["x"]-68 , bomb["y"]-70, current_time))
+                can_place_bomb = True
                 bomb_cooldown_time = current_time + 100
 
         bombs = active_bombs
@@ -310,12 +317,23 @@ def run_game(game_settings):
                 window.blit(explosion_img, (exp_x, exp_y))
 
                 for offset_x, offset_y in [(0,0),(0,-40),(0,40),(-40,0),(40,0)]:
-                    explosion_rect = pygame.Rect(exp_x + 50 + offset_x, exp_y + 50 + offset_y, 40, 40)
+                    explosion_rect = pygame.Rect(exp_x + 66 + offset_x, exp_y + 66 + offset_y, 18, 18)
                     destroyable_blocks = [block for block in destroyable_blocks if not explosion_rect.colliderect(block)]
+
+                    if explosion_rect.colliderect(pygame.Rect(door_position[0], door_position[1], 60, 60)):
+                        door_visible = True
+
                     if player_rect.colliderect(explosion_rect):
                         player_dead = True
 
         explosions = new_explosions
+
+        if door_visible:
+            window.blit(door_img, door_position)
+            door_rect = pygame.Rect(door_position[0], door_position[1], 60, 60)
+            if player_rect.colliderect(door_rect):
+                return
+
         if player_dead:
             return
 
