@@ -53,19 +53,35 @@ def settings_menu(window, game_settings):
     font = pygame.font.SysFont("Arial", 40)
     small_font = pygame.font.SysFont("Arial", 28)
 
-    title = font.render("Nastavení rychlosti", True, (255, 255, 255))
-    speed_options = [("Pomalu", 2), ("Normálně", 3), ("Rychle", 5)]
+    title = font.render("Control Settings", True, (255, 255, 255))
 
-    buttons = [pygame.Rect(270, 220 + i*70, 240, 50) for i in range(len(speed_options))]
+    control_keys = [
+        ("Move Up", "up"),
+        ("Move Down", "down"),
+        ("Move Left", "left"),
+        ("Move Right", "right"),
+        ("Place Bomb", "bomb")
+    ]
+
+    buttons = [pygame.Rect(200, 180 + i * 70, 380, 50) for i in range(len(control_keys))]
+    back_button = pygame.Rect(200, 550, 380, 50)
+
+    waiting_for_key = None
+
     running = True
     while running:
         window.fill((0, 0, 64))
-        window.blit(title, (220, 100))
+        window.blit(title, (200, 100))
 
-        for i, (label, _) in enumerate(speed_options):
+        for i, (label, action) in enumerate(control_keys):
             pygame.draw.rect(window, (255, 255, 255), buttons[i])
-            text = small_font.render(label, True, (0, 0, 0))
-            window.blit(text, (buttons[i].x + 50, buttons[i].y + 10))
+            key_name = pygame.key.name(game_settings["controls"][action]).upper()
+            text = small_font.render(f"{label}: {key_name}", True, (0, 0, 0))
+            window.blit(text, (buttons[i].x + 10, buttons[i].y + 10))
+
+        pygame.draw.rect(window, (200, 200, 200), back_button)
+        back_text = small_font.render("Back", True, (0, 0, 0))
+        window.blit(back_text, (back_button.x + 140, back_button.y + 10))
 
         pygame.display.flip()
 
@@ -73,14 +89,20 @@ def settings_menu(window, game_settings):
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                pos = pygame.mouse.get_pos()
-                for i, btn in enumerate(buttons):
-                    if btn.collidepoint(pos):
-                        game_settings["player_speed"] = speed_options[i][1]
+            if waiting_for_key:
+                if event.type == pygame.KEYDOWN:
+                    game_settings["controls"][waiting_for_key] = event.key
+                    waiting_for_key = None
+            else:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    pos = pygame.mouse.get_pos()
+                    for i, btn in enumerate(buttons):
+                        if btn.collidepoint(pos):
+                            waiting_for_key = control_keys[i][1]
+                    if back_button.collidepoint(pos):
                         running = False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    running = False
 
 def pause_menu(window, game_settings):
     font = pygame.font.SysFont("Arial", 50)
@@ -90,8 +112,8 @@ def pause_menu(window, game_settings):
     title_text = font.render("Pause", True, (255, 255, 255))
 
     resume_button = pygame.Rect(270, 240, 240, 50)
-    menu_button = pygame.Rect(270, 310, 240, 50)
-    settings_button = pygame.Rect(270, 380, 240, 50)
+    settings_button = pygame.Rect(270, 310, 240, 50)
+    menu_button = pygame.Rect(270, 380, 240, 50)
 
     resume_text = small_font.render("Continue", True, (0, 0, 0))
     settings_text = small_font.render("Settings", True, (0, 0, 0))
@@ -120,16 +142,15 @@ def pause_menu(window, game_settings):
                 if resume_button.collidepoint(mouse_pos):
                     paused = False
                 elif menu_button.collidepoint(mouse_pos):
-                    return True  # go back to main menu
+                    return True
                 elif settings_button.collidepoint(mouse_pos):
-                    settings_menu(window, game_settings)  # open settings menu
+                    settings_menu(window, game_settings)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     paused = False
                 elif event.key == pygame.K_m:
                     return True
     return False
-
 
 def run_game(game_settings):
     player_img = pygame.image.load("player.png")
@@ -143,6 +164,8 @@ def run_game(game_settings):
     bomb_img = pygame.transform.scale(bomb_img, (40, 40))
     destroyable_block_img = pygame.image.load("destroyable_block.png")
     destroyable_block_img = pygame.transform.scale(destroyable_block_img, (60, 60))
+    explosion_img = pygame.image.load("explosion.png")
+    explosion_img = pygame.transform.scale(explosion_img, (180, 180))
 
     player_x, player_y = 60, 60
     player_width, player_height = 35, 47
@@ -176,6 +199,8 @@ def run_game(game_settings):
 
     bombs = []
     explosions = []
+    can_place_bomb = True
+    bomb_cooldown_time = 0 
 
     running = True
     while running:
@@ -187,29 +212,26 @@ def run_game(game_settings):
                 pygame.quit()
                 exit()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    bomb_x = (player_x // 60) * 60 + 10
-                    bomb_y = (player_y // 60) * 60 + 10
-                    bombs.append({
-                        "x": bomb_x,
-                        "y": bomb_y,
-                        "time": current_time,
-                        "player_inside": True
-                    })
+                if event.key == game_settings["controls"]["bomb"]:
+                    if can_place_bomb and len(bombs) == 0 and current_time >= bomb_cooldown_time:
+                        bomb_x = (player_x // 60) * 60 + 10
+                        bomb_y = (player_y // 60) * 60 + 10
+                        bombs.append({"x": bomb_x, "y": bomb_y, "time": current_time, "player_inside": True})
+                        can_place_bomb = False 
                 if event.key == pygame.K_ESCAPE:
                     if pause_menu(window, game_settings):
                         return
 
         keys = pygame.key.get_pressed()
         dx = dy = 0
-        if keys[pygame.K_w] and player_y > 60:
-            dy = -game_settings["player_speed"]
-        if keys[pygame.K_s] and player_y < 540 - player_height:
-            dy = game_settings["player_speed"]
-        if keys[pygame.K_a] and player_x > 60:
-            dx = -game_settings["player_speed"]
-        if keys[pygame.K_d] and player_x < 660 - player_width:
-            dx = game_settings["player_speed"]
+        if keys[game_settings["controls"]["up"]] and player_y > 60:
+            dy = -3
+        if keys[game_settings["controls"]["down"]] and player_y < 540 - player_height:
+            dy = 3
+        if keys[game_settings["controls"]["left"]] and player_x > 60:
+            dx = -3
+        if keys[game_settings["controls"]["right"]] and player_x < 660 - player_width:
+            dx = 3
 
         next_player_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
         collision = False
@@ -263,7 +285,10 @@ def run_game(game_settings):
             if current_time - bomb["time"] < 3000:
                 active_bombs.append(bomb)
             else:
-                explosions.append((bomb["x"] - 15, bomb["y"] - 15, current_time))
+                explosions.append((bomb["x"]-70 , bomb["y"]-70, current_time))
+                can_place_bomb = True  
+                bomb_cooldown_time = current_time + 100
+
         bombs = active_bombs
 
         window.fill((0,0,0))
@@ -282,10 +307,10 @@ def run_game(game_settings):
         for exp_x, exp_y, start_time in explosions:
             if current_time - start_time < 500:
                 new_explosions.append((exp_x, exp_y, start_time))
-                for offset_x, offset_y in [(0,0),(0,-40),(0,40),(-40,0),(40,0)]:
-                    explosion_rect = pygame.Rect(exp_x + offset_x, exp_y + offset_y, 40, 40)
-                    pygame.draw.rect(window, (255,165,0), explosion_rect)
+                window.blit(explosion_img, (exp_x, exp_y))
 
+                for offset_x, offset_y in [(0,0),(0,-40),(0,40),(-40,0),(40,0)]:
+                    explosion_rect = pygame.Rect(exp_x + 50 + offset_x, exp_y + 50 + offset_y, 40, 40)
                     destroyable_blocks = [block for block in destroyable_blocks if not explosion_rect.colliderect(block)]
                     if player_rect.colliderect(explosion_rect):
                         player_dead = True
@@ -298,8 +323,15 @@ def run_game(game_settings):
         window.blit(player_img, (player_x, player_y))
         pygame.display.flip()
 
-# Hlavní cyklus
 while True:
-    game_settings = {"player_speed": 3}
+    game_settings = {
+        "controls": {
+            "up": pygame.K_w,
+            "down": pygame.K_s,
+            "left": pygame.K_a,
+            "right": pygame.K_d,
+            "bomb": pygame.K_SPACE
+        }
+    }
     main_menu(window, game_settings)
     run_game(game_settings)
