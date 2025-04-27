@@ -1,10 +1,22 @@
 import pygame, random
+import sys
+import os
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 pygame.init()
-print(pygame.font.get_fonts())
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 clock = pygame.time.Clock()
+pygame.mixer.music.load(resource_path("music.mp3"))
+pygame.mixer.music.play(-1)
+pygame.mixer.music.set_volume(0.2)
 
-background_img = pygame.image.load("background.png")
+background_img = pygame.image.load(resource_path("background.png"))
 background_img = pygame.transform.scale(background_img, window.get_size())
 
 def center_rect(w, h, bw, bh):
@@ -12,8 +24,8 @@ def center_rect(w, h, bw, bh):
 
 def main_menu(window, game_settings, background_img):
     pygame.font.init()
-    font = pygame.font.Font("font.TTF", 50)
-    small_font = pygame.font.Font("font.TTF", 30)
+    font = pygame.font.Font(resource_path("font.TTF"), 50)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 30)
 
     w, h = window.get_size()
 
@@ -43,7 +55,7 @@ def main_menu(window, game_settings, background_img):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
                 if start_button.collidepoint(mouse_pos):
@@ -52,18 +64,18 @@ def main_menu(window, game_settings, background_img):
                     settings_menu(window, game_settings, background_img)
                 elif quit_button.collidepoint(mouse_pos):
                     pygame.quit()
-                    exit()
+                    sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     menu_running = False
 
 def settings_menu(window, game_settings, background_img):
-    font = pygame.font.Font("font.TTF", 40)
-    small_font = pygame.font.Font("font.TTF", 28)
+    font = pygame.font.Font(resource_path("font.TTF"), 40)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 28)
 
     w, h = window.get_size()
 
-    title = font.render("Control Settings", True, (255, 255, 255))
+    title = font.render("Settings", True, (255, 255, 255))
 
     control_keys = [
         ("Move Up", "up"),
@@ -75,7 +87,7 @@ def settings_menu(window, game_settings, background_img):
 
     buttons = []
     button_width, button_height = 380, 50
-    start_y = h//2 - (len(control_keys) * 70)//2
+    start_y = h//2 - (len(control_keys) * 70)//2 - 100
 
     for i in range(len(control_keys)):
         btn = center_rect(w, h, button_width, button_height)
@@ -85,6 +97,9 @@ def settings_menu(window, game_settings, background_img):
     back_button = center_rect(w, h, button_width, button_height)
     back_button.y = h - 100
 
+    volume_bar = pygame.Rect(w//2 - 150, h - 250, 300, 8)
+    dragging_volume = False
+
     waiting_for_key = None
 
     running = True
@@ -92,19 +107,28 @@ def settings_menu(window, game_settings, background_img):
         window.blit(background_img, (0, 0))
         window.blit(title, (w//2 - title.get_width()//2, 50))
 
+        volume_handle_x = volume_bar.x + int(pygame.mixer.music.get_volume() * volume_bar.width)
+
         for i, (label, action) in enumerate(control_keys):
             key_name = pygame.key.name(game_settings["controls"][action]).upper()
             text = small_font.render(f"{label}: {key_name}", True, (0, 0, 0))
             window.blit(text, (buttons[i].centerx - text.get_width()//2, buttons[i].centery - text.get_height()//2))
+
         back_text = font.render("Back", True, (255, 255, 255))
         window.blit(back_text, (back_button.centerx - back_text.get_width()//2, back_button.centery - back_text.get_height()//2))
+
+        volume_text = small_font.render("Music Volume", True, (255, 255, 255))
+        window.blit(volume_text, (w//2 - volume_text.get_width()//2, volume_bar.y - 30))
+        pygame.draw.rect(window, (180, 180, 180), volume_bar)
+        pygame.draw.circle(window, (255, 255, 255), (volume_handle_x, volume_bar.centery), 10)
 
         pygame.display.flip()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
+
             if waiting_for_key:
                 if event.type == pygame.KEYDOWN:
                     game_settings["controls"][waiting_for_key] = event.key
@@ -112,17 +136,32 @@ def settings_menu(window, game_settings, background_img):
             else:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     pos = pygame.mouse.get_pos()
+                    if pygame.Rect(volume_handle_x-10, volume_bar.centery-10, 20, 20).collidepoint(pos):
+                        dragging_volume = True
+                    elif volume_bar.collidepoint(pos):
+                        new_volume = (pos[0] - volume_bar.x) / volume_bar.width
+                        pygame.mixer.music.set_volume(max(0, min(1, new_volume)))
+
                     for i, btn in enumerate(buttons):
                         if btn.collidepoint(pos):
                             waiting_for_key = control_keys[i][1]
                     if back_button.collidepoint(pos):
                         running = False
+
+                if event.type == pygame.MOUSEBUTTONUP:
+                    dragging_volume = False
+
+                if event.type == pygame.MOUSEMOTION and dragging_volume:
+                    new_volume = (event.pos[0] - volume_bar.x) / volume_bar.width
+                    pygame.mixer.music.set_volume(max(0, min(1, new_volume)))
+
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     running = False
 
+
 def death_menu(window, background_img):
-    font = pygame.font.Font("font.TTF", 50)
-    small_font = pygame.font.Font("font.TTF", 30)
+    font = pygame.font.Font(resource_path("font.TTF"), 50)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 30)
 
     w, h = window.get_size()
 
@@ -148,7 +187,7 @@ def death_menu(window, background_img):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 if retry_button.collidepoint(pos):
@@ -162,8 +201,8 @@ def death_menu(window, background_img):
                     return "menu"
 
 def pause_menu(window, game_settings, background_img):
-    font = pygame.font.Font("font.TTF", 50)
-    small_font = pygame.font.Font("font.TTF", 30)
+    font = pygame.font.Font(resource_path("font.TTF"), 50)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 30)
 
     w, h = window.get_size()
 
@@ -195,7 +234,7 @@ def pause_menu(window, game_settings, background_img):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
                 if resume_button.collidepoint(mouse_pos):
@@ -211,8 +250,8 @@ def pause_menu(window, game_settings, background_img):
                     return True
     return False
 def level_complete_menu(window, background_img, score):
-    font = pygame.font.Font("font.TTF", 50)
-    small_font = pygame.font.Font("font.TTF", 30)
+    font = pygame.font.Font(resource_path("font.TTF"), 50)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 30)
 
     w, h = window.get_size()
 
@@ -240,7 +279,7 @@ def level_complete_menu(window, background_img, score):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
                 if retry_button.collidepoint(pos):
@@ -255,20 +294,20 @@ def level_complete_menu(window, background_img, score):
 
 
 def run_game(game_settings, background_img):
-    player_img = pygame.image.load("player.png")
+    player_img = pygame.image.load(resource_path("player.png"))
     player_img = pygame.transform.scale(player_img, (35, 47))
-    block_img = pygame.image.load("block.png")
+    block_img = pygame.image.load(resource_path("block.png"))
     block_img = pygame.transform.scale(block_img, (60, 60))
-    map_img = pygame.image.load("map.png")
-    enemy_img = pygame.image.load("ballon.png")
+    map_img = pygame.image.load(resource_path("map.png"))
+    enemy_img = pygame.image.load(resource_path("ballon.png"))
     enemy_img = pygame.transform.scale(enemy_img, (37, 50))
-    bomb_img = pygame.image.load("bomb.png")
+    bomb_img = pygame.image.load(resource_path("bomb.png"))
     bomb_img = pygame.transform.scale(bomb_img, (40, 40))
-    destroyable_block_img = pygame.image.load("destroyable_block.png")
+    destroyable_block_img = pygame.image.load(resource_path("destroyable_block.png"))
     destroyable_block_img = pygame.transform.scale(destroyable_block_img, (60, 60))
-    explosion_img = pygame.image.load("explosion.png")
+    explosion_img = pygame.image.load(resource_path("explosion.png"))
     explosion_img = pygame.transform.scale(explosion_img, (180, 180))
-    door_img = pygame.image.load("door.png")
+    door_img = pygame.image.load(resource_path("door.png"))
     door_img = pygame.transform.scale(door_img, (60, 60))
 
     map_width = 780
@@ -279,7 +318,7 @@ def run_game(game_settings, background_img):
 
     score = 0
     start_time = pygame.time.get_ticks()
-    font = pygame.font.Font("font.TTF", 28)
+    font = pygame.font.Font(resource_path("font.TTF"), 28)
 
     player_x, player_y = 60, 60
     player_width, player_height = 35, 47
@@ -325,7 +364,7 @@ def run_game(game_settings, background_img):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == game_settings["controls"]["bomb"]:
                     if can_place_bomb and len(bombs) == 0 and current_time >= bomb_cooldown_time:
@@ -341,7 +380,7 @@ def run_game(game_settings, background_img):
         dx = dy = 0
         if keys[game_settings["controls"]["up"]] and player_y > 60:
             dy = -3
-        if keys[game_settings["controls"]["down"]] and player_y < 540 - player_height:
+        if keys[game_settings["controls"]["down"]] and player_y < 598 - player_height:
             dy = 3
         if keys[game_settings["controls"]["left"]] and player_x > 60:
             dx = -3
@@ -491,3 +530,8 @@ while True:
         result = run_game(game_settings, background_img)
         if result == "menu":
             break
+        elif result == "retry":
+            continue
+        elif result == "next":
+
+            continue
