@@ -31,6 +31,7 @@ def available_levels():
     return sorted(levels)
 pygame.init()
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+pygame.display.set_caption("Bomberman")
 clock = pygame.time.Clock()
 pygame.mixer.music.load(resource_path("music.mp3"))
 pygame.mixer.music.play(-1)
