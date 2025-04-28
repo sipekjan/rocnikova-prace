@@ -7,8 +7,28 @@ def resource_path(relative_path):
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
+
+def load_map(level_number):
+    map_file = resource_path(f"maps/level{level_number}.txt")
+    map_data = []
+    try:
+        with open(map_file, 'r') as f:
+            for line in f:
+                map_data.append(list(line.strip()))
+    except FileNotFoundError:
+        print(f"Level {level_number} not found!")
+        return None
+    return map_data
+
+def available_levels():
+    maps_dir = resource_path("maps")
+    levels = []
+    for file in os.listdir(maps_dir):
+        if file.startswith("level") and file.endswith(".txt"):
+            level_num = int(file[len("level"): -len(".txt")])
+            levels.append(level_num)
+    return sorted(levels)
 pygame.init()
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 clock = pygame.time.Clock()
@@ -59,7 +79,10 @@ def main_menu(window, game_settings, background_img):
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
                 if start_button.collidepoint(mouse_pos):
-                    menu_running = False
+                    selected_level = level_select_menu(window, background_img, game_settings)
+                    if selected_level:
+                        menu_running = False
+                        game_settings["selected_level"] = selected_level
                 elif settings_button.collidepoint(mouse_pos):
                     settings_menu(window, game_settings, background_img)
                 elif quit_button.collidepoint(mouse_pos):
@@ -292,8 +315,49 @@ def level_complete_menu(window, background_img, score):
                 elif event.key == pygame.K_n:
                     return "next"
 
+def level_select_menu(window, background_img, game_settings):
+    font = pygame.font.Font(resource_path("font.TTF"), 50)
+    small_font = pygame.font.Font(resource_path("font.TTF"), 30)
 
-def run_game(game_settings, background_img):
+    w, h = window.get_size()
+
+    title_text = font.render("Select Level", True, (255, 255, 255))
+
+    levels = available_levels()
+    buttons = []
+    button_width, button_height = 240, 60
+    start_y = h//2 - (len(levels) * (button_height + 20)) // 2
+
+    for i, level_num in enumerate(levels):
+        btn = pygame.Rect(w//2 - button_width//2, start_y + i * (button_height + 20), button_width, button_height)
+        buttons.append((btn, level_num))
+
+    running = True
+    while running:
+        window.blit(background_img, (0, 0))
+        window.blit(title_text, (w//2 - title_text.get_width()//2, h//4))
+
+        for rect, level_num in buttons:
+            text = small_font.render(f"Level {level_num}", True, (0, 0, 0))
+            window.blit(text, (rect.centerx - text.get_width()//2, rect.centery - text.get_height()//2))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                for rect, level_num in buttons:
+                    if rect.collidepoint(pos):
+                        return level_num
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return None
+            
+def run_game(game_settings, background_img, level_number):
     player_img = pygame.image.load(resource_path("player.png"))
     player_img = pygame.transform.scale(player_img, (35, 47))
     block_img = pygame.image.load(resource_path("block.png"))
@@ -310,52 +374,50 @@ def run_game(game_settings, background_img):
     door_img = pygame.image.load(resource_path("door.png"))
     door_img = pygame.transform.scale(door_img, (60, 60))
 
-    map_width = 780
-    map_height = 660
-    window_width, window_height = window.get_size()
-    offset_x = (window_width - map_width) // 2
-    offset_y = (window_height - map_height) // 2
-
-    score = 0
-    start_time = pygame.time.get_ticks()
-    font = pygame.font.Font(resource_path("font.TTF"), 28)
-
-    player_x, player_y = 60, 60
-    player_width, player_height = 35, 47
-
-    enemy_x, enemy_y = 375, 300
-    enemy_direction = random.choice([(1,0), (-1,0), (0,1), (0,-1)])
-    next_enemy_move_time = pygame.time.get_ticks() + 1000
-    enemy_dead = False
+    map_data = load_map(level_number)
+    if map_data is None:
+        return "menu"
 
     solid_blocks = []
-    for i in range(4):
-        for j in range(5):
-            solid_blocks.append(pygame.Rect(120 + j*120, 120 + i*120, 60, 60))
+    destroyable_blocks = []
+    enemy_positions = []
+    player_position = None
+    door_position = None
 
-    tile_positions = [(x, y) for x in range(60, 661, 60) for y in range(60, 541, 60)]
-    player_cell = (player_x // 60 * 60, player_y // 60 * 60)
-    forbidden_cells = set((player_cell[0] + dx*60, player_cell[1] + dy*60) for dx in (-1,0,1) for dy in (-1,0,1))
-    enemy_cell = ((enemy_x // 60) * 60, (enemy_y // 60) * 60)
+    for row_idx, row in enumerate(map_data):
+        for col_idx, tile in enumerate(row):
+            x = col_idx * 60
+            y = row_idx * 60
+            if tile == '#':
+                solid_blocks.append(pygame.Rect(x, y, 60, 60))
+            elif tile == 'D':
+                destroyable_blocks.append(pygame.Rect(x, y, 60, 60))
+            elif tile == 'E':
+                enemy_positions.append((x, y))
+            elif tile == 'P':
+                player_position = (x, y)
+            elif tile == 'O':
+                door_position = (x, y)
 
-    valid_destroyable_cells = []
-    for cell in tile_positions:
-        if cell not in forbidden_cells and cell != enemy_cell:
-            if all((block.x, block.y) != cell for block in solid_blocks):
-                valid_destroyable_cells.append(cell)
+    if not player_position:
+        print("No player start position found!")
+        return "menu"
 
-    random.shuffle(valid_destroyable_cells)
-    destroyable_blocks = [pygame.Rect(x, y, 60, 60) for (x, y) in valid_destroyable_cells[:49]]
-
-    door_block = random.choice(destroyable_blocks)
-    door_position = (door_block.x, door_block.y)
-    door_visible = False
+    player_rect = pygame.Rect(player_position[0], player_position[1], 35, 47)
+    enemies = [{"rect": pygame.Rect(pos[0], pos[1], 37, 50), "dir": random.choice([(2,0), (-2,0), (0,2), (0,-2)]), "next_change": pygame.time.get_ticks() + 1000} for pos in enemy_positions]
 
     bombs = []
     explosions = []
     can_place_bomb = True
     bomb_cooldown_time = 0
 
+    offset_x = (window.get_width() - len(map_data[0]) * 60) // 2
+    offset_y = (window.get_height() - len(map_data) * 60) // 2
+
+    score = 0
+    font = pygame.font.Font(resource_path("font.TTF"), 28)
+
+    clock = pygame.time.Clock()
     running = True
     while running:
         current_time = pygame.time.get_ticks()
@@ -367,10 +429,10 @@ def run_game(game_settings, background_img):
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == game_settings["controls"]["bomb"]:
-                    if can_place_bomb and len(bombs) == 0 and current_time >= bomb_cooldown_time:
-                        bomb_x = (player_x // 60) * 60 + 10
-                        bomb_y = (player_y // 60) * 60 + 10
-                        bombs.append({"x": bomb_x, "y": bomb_y, "time": current_time, "player_inside": True})
+                    if can_place_bomb and current_time >= bomb_cooldown_time:
+                        bomb_x = (player_rect.centerx // 60) * 60 + 10
+                        bomb_y = (player_rect.centery // 60) * 60 + 10
+                        bombs.append({"rect": pygame.Rect(bomb_x, bomb_y, 40, 40), "time": current_time, "player_inside": True})
                         can_place_bomb = False
                 if event.key == pygame.K_ESCAPE:
                     if pause_menu(window, game_settings, background_img):
@@ -378,84 +440,106 @@ def run_game(game_settings, background_img):
 
         keys = pygame.key.get_pressed()
         dx = dy = 0
-        if keys[game_settings["controls"]["up"]] and player_y > 60:
-            dy = -3
-        if keys[game_settings["controls"]["down"]] and player_y < 598 - player_height:
-            dy = 3
-        if keys[game_settings["controls"]["left"]] and player_x > 60:
-            dx = -3
-        if keys[game_settings["controls"]["right"]] and player_x < 720 - player_width:
-            dx = 3
+        if keys[game_settings["controls"]["up"]]: dy = -3
+        if keys[game_settings["controls"]["down"]]: dy = 3
+        if keys[game_settings["controls"]["left"]]: dx = -3
+        if keys[game_settings["controls"]["right"]]: dx = 3
 
-        next_player_rect = pygame.Rect(player_x + dx, player_y + dy, player_width, player_height)
+        next_rect = player_rect.move(dx, dy)
         collision = False
         for block in solid_blocks + destroyable_blocks:
-            if next_player_rect.colliderect(block):
+            if next_rect.colliderect(block):
                 collision = True
                 break
         for bomb in bombs:
-            bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
-            if next_player_rect.colliderect(bomb_rect) and not bomb["player_inside"]:
+            if next_rect.colliderect(bomb["rect"]) and not bomb.get("player_inside", False):
                 collision = True
                 break
         if not collision:
-            player_x += dx
-            player_y += dy
-
-        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+            player_rect = next_rect
 
         for bomb in bombs:
-            bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
-            if not player_rect.colliderect(bomb_rect):
+            if not player_rect.colliderect(bomb["rect"]):
                 bomb["player_inside"] = False
 
-        if not enemy_dead:
-            if current_time > next_enemy_move_time:
-                enemy_direction = random.choice([(1,0), (-1,0), (0,1), (0,-1)])
-                next_enemy_move_time = current_time + 1000
+        new_bombs = []
+        for bomb in bombs:
+            if current_time - bomb["time"] >= 3000:
+                bomb_center_x = (bomb["rect"].x // 60) * 60
+                bomb_center_y = (bomb["rect"].y // 60) * 60
+                explosions.append({"rect": pygame.Rect(bomb_center_x-60, bomb_center_y-60, 60, 60), "time": current_time})
 
-            next_enemy_x = enemy_x + enemy_direction[0]*2
-            next_enemy_y = enemy_y + enemy_direction[1]*2
-            next_enemy_rect = pygame.Rect(next_enemy_x, next_enemy_y, 37, 50)
+                directions = [(0, -60), (0, 60), (-60, 0), (60, 0)]
+                for dx, dy in directions:
+                    check_rect = pygame.Rect(bomb_center_x + dx, bomb_center_y + dy, 60, 60)
 
-            enemy_can_move = True
+                    for block in destroyable_blocks[:]:
+                        if check_rect.colliderect(block):
+                            destroyable_blocks.remove(block)
+                            score += 5
+
+                    for enemy in enemies[:]:
+                        if check_rect.colliderect(enemy["rect"]):
+                            enemies.remove(enemy)
+                            score += 100
+
+                    if check_rect.colliderect(player_rect):
+                        return death_menu(window, background_img)
+
+                bomb_cooldown_time = current_time + 500
+                can_place_bomb = True
+            else:
+                new_bombs.append(bomb)
+        bombs = new_bombs
+
+        new_explosions = []
+        for explosion in explosions:
+            if current_time - explosion["time"] <= 500:
+                new_explosions.append(explosion)
+
+                for block in destroyable_blocks[:]:
+                    if explosion["rect"].colliderect(block):
+                        destroyable_blocks.remove(block)
+                        score += 5
+
+                if door_position and explosion["rect"].colliderect(pygame.Rect(door_position[0], door_position[1], 60, 60)):
+                    door_visible = True
+
+                for enemy in enemies[:]:
+                    if explosion["rect"].colliderect(enemy["rect"]):
+                        enemies.remove(enemy)
+                        score += 100
+
+                if explosion["rect"].colliderect(player_rect):
+                    return death_menu(window, background_img)
+        explosions = new_explosions
+
+        for enemy in enemies:
+            if current_time >= enemy["next_change"]:
+                enemy["dir"] = random.choice([(2,0), (-2,0), (0,2), (0,-2)])
+                enemy["next_change"] = current_time + 1000
+
+            move_x, move_y = enemy["dir"]
+            next_enemy = enemy["rect"].move(move_x, move_y)
+
+            collision = False
             for block in solid_blocks + destroyable_blocks:
-                if next_enemy_rect.colliderect(block):
-                    enemy_can_move = False
+                if next_enemy.colliderect(block):
+                    collision = True
                     break
             for bomb in bombs:
-                bomb_rect = pygame.Rect(bomb["x"], bomb["y"], 30, 30)
-                if next_enemy_rect.colliderect(bomb_rect):
-                    enemy_can_move = False
+                if next_enemy.colliderect(bomb["rect"]):
+                    collision = True
                     break
-            if not enemy_can_move or not (120 <= next_enemy_x <= 660 and 120 <= next_enemy_y <= 540):
-                enemy_direction = random.choice([(1,0), (-1,0), (0,1), (0,-1)])
+            if not collision:
+                enemy["rect"] = next_enemy
             else:
-                enemy_x, enemy_y = next_enemy_x, next_enemy_y
+                enemy["dir"] = random.choice([(2,0), (-2,0), (0,2), (0,-2)])
 
-            enemy_rect = pygame.Rect(enemy_x, enemy_y, 37, 50)
-        else:
-            enemy_rect = pygame.Rect(-100, -100, 0, 0)
-
-        active_bombs = []
-        for bomb in bombs:
-            if current_time - bomb["time"] < 3000:
-                active_bombs.append(bomb)
-            else:
-                explosions.append((bomb["x"]-68, bomb["y"]-70, current_time))
-                can_place_bomb = True
-                bomb_cooldown_time = current_time + 100
-        bombs = active_bombs
+            if player_rect.colliderect(enemy["rect"]):
+                return death_menu(window, background_img)
 
         window.blit(background_img, (0, 0))
-
-        top_bar_height = 60
-
-
-        score_text = font.render(f"Score: {score}", True, (0, 0, 0))
-
-        window.blit(score_text, (offset_x + 10, offset_y - top_bar_height + 15))
-
         window.blit(map_img, (offset_x, offset_y))
 
         for block in solid_blocks:
@@ -463,54 +547,23 @@ def run_game(game_settings, background_img):
         for block in destroyable_blocks:
             window.blit(destroyable_block_img, (block.x + offset_x, block.y + offset_y))
         for bomb in bombs:
-            window.blit(bomb_img, (bomb["x"] + offset_x, bomb["y"] + offset_y))
+            window.blit(bomb_img, (bomb["rect"].x + offset_x, bomb["rect"].y + offset_y))
+        for explosion in explosions:
+            window.blit(explosion_img, (explosion["rect"].x + offset_x, explosion["rect"].y + offset_y))
 
-        new_explosions = []
-        player_dead = False
-
-        for exp_x, exp_y, start_time in explosions:
-            if current_time - start_time < 500:
-                new_explosions.append((exp_x, exp_y, start_time))
-                window.blit(explosion_img, (exp_x + offset_x, exp_y + offset_y))
-
-                for offset_dx, offset_dy in [(0,0), (0,-40), (0,40), (-40,0), (40,0)]:
-                    explosion_rect = pygame.Rect(exp_x + 66 + offset_dx, exp_y + 66 + offset_dy, 38, 28)
-
-                    remaining_blocks = []
-                    for block in destroyable_blocks:
-                        if explosion_rect.colliderect(block):
-                            score += 5  
-                        else:
-                            remaining_blocks.append(block)
-                    destroyable_blocks = remaining_blocks
-
-                    if explosion_rect.colliderect(pygame.Rect(door_position[0], door_position[1], 60, 60)):
-                        door_visible = True
-
-                    if player_rect.colliderect(explosion_rect):
-                        player_dead = True
-                    if enemy_rect.colliderect(explosion_rect):
-                        enemy_dead = True
-                        score += 100
-
-        explosions = new_explosions
-
-        if door_visible:
-            window.blit(door_img, (door_position[0] + offset_x, door_position[1] + offset_y))
+        if door_position:
             door_rect = pygame.Rect(door_position[0], door_position[1], 60, 60)
             if player_rect.colliderect(door_rect):
                 return level_complete_menu(window, background_img, score)
+            window.blit(door_img, (door_position[0] + offset_x, door_position[1] + offset_y))
 
-        if player_rect.colliderect(enemy_rect):
-            player_dead = True
+        for enemy in enemies:
+            window.blit(enemy_img, (enemy["rect"].x + offset_x, enemy["rect"].y + offset_y))
 
-        if player_dead:
-            result = death_menu(window, background_img)
-            return result
+        window.blit(player_img, (player_rect.x + offset_x, player_rect.y + offset_y))
 
-        if not enemy_dead:
-            window.blit(enemy_img, (enemy_x + offset_x, enemy_y + offset_y))
-        window.blit(player_img, (player_x + offset_x, player_y + offset_y))
+        score_text = font.render(f"Score: {score}", True, (0, 0, 0))
+        window.blit(score_text, (offset_x + 10, offset_y - 40))
 
         pygame.display.flip()
 
@@ -522,16 +575,22 @@ while True:
             "left": pygame.K_a,
             "right": pygame.K_d,
             "bomb": pygame.K_SPACE
-        }
+        },
+        "selected_level": 1
     }
     main_menu(window, game_settings, background_img)
 
     while True:
-        result = run_game(game_settings, background_img)
+        result = run_game(game_settings, background_img, game_settings["selected_level"])
         if result == "menu":
             break
         elif result == "retry":
             continue
         elif result == "next":
-
+            next_level = game_settings["selected_level"] + 1
+        available = available_levels()
+        if next_level in available:
+            game_settings["selected_level"] = next_level
             continue
+        else:
+            break
